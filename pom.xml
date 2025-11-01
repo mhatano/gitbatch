@@ -5,12 +5,12 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>jp.hatano.gitbatch</groupId>
-  <artifactId>demo</artifactId>
+  <artifactId>gitbatch</artifactId>
   <version>1.0-SNAPSHOT</version>
 
-  <name>demo</name>
+  <name>gitbatch</name>
   <!-- FIXME change it to the project's website -->
-  <url>http://www.example.com</url>
+  <url>http://github.com/mhatano/gitbatch</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
