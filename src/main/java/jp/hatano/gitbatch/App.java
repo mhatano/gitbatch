@@ -10,9 +10,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.Scanner;
 import java.util.stream.Collectors;
 
@@ -47,10 +49,17 @@ public class App {
                 System.out.println("No local branches found. Make sure you are in a git repository.");
                 return;
             }
-            String localBranch = selectBranch(scanner, "local", localBranches, lastSelectedLocalBranch);
+            List<String> selectBranches = selectBranches(scanner, "local", localBranches, lastSelectedLocalBranch);
+
+            if (selectBranches.size() == 0) {
+                System.out.println("No local branch selected. Aborting.");
+                return;
+            }
+            String localBranch = selectBranches.get(0); // Only one local branch can be selected
 
             // 2. Select another branch from local or remote
             List<String> allBranches = new ArrayList<>(localBranches);
+            allBranches.remove(localBranch); // Remove the selected local branch
             List<String> remoteBranches = getGitBranches(true); // Get remote branches
             allBranches.addAll(remoteBranches); // Add them to the list
 
@@ -58,31 +67,38 @@ public class App {
                 System.out.println("No other branches available to merge.");
                 return;
             }
-            String sourceBranch = selectBranch(scanner, "source (to merge from)", allBranches, lastSelectedMergeBranch);
+            List<String> sourceBranches = selectBranches(scanner, "source (to merge from)", allBranches, lastSelectedMergeBranch);
 
-            // 3. Determine the local name for the source branch
-            String localSourceBranchName = sourceBranch;
-            if (sourceBranch.startsWith("origin/")) { // Simple assumption for remote branches
-                localSourceBranchName = sourceBranch.substring("origin/".length());
+            if (sourceBranches.isEmpty()) {
+                System.out.println("No source branches selected. Aborting.");
+                return;
             }
 
-            // 4. Checkout source branch and pull latest changes
-            System.out.println("\n--- Checking out source branch: " + localSourceBranchName + " ---");
-            executeCommand("git", "checkout", localSourceBranchName);
+            for (String sourceBranch : sourceBranches) {
+                System.out.println("\n>>> Processing source branch: " + sourceBranch + " <<<");
+                // 3. Determine the local name for the source branch
+                String localSourceBranchName = sourceBranch;
+                if (sourceBranch.startsWith("origin/")) { // Simple assumption for remote branches
+                    localSourceBranchName = sourceBranch.substring("origin/".length());
+                }
 
-            System.out.println("\n--- Pulling latest changes for " + localSourceBranchName + " ---");
-            executeCommand("git", "pull");
+                // 4. Checkout source branch and pull latest changes
+                System.out.println("\n--- Checking out source branch: " + localSourceBranchName + " ---");
+                executeCommand("git", "checkout", localSourceBranchName);
 
-            // 5. Checkout target branch
-            System.out.println("\n--- Checking out target branch: " + localBranch + " ---");
-            executeCommand("git", "checkout", localBranch);
+                System.out.println("\n--- Pulling latest changes for " + localSourceBranchName + " ---");
+                executeCommand("git", "pull");
 
-            // 6. Merge the updated source branch into the target branch
-            System.out.println("\n--- Merging branch " + localSourceBranchName + " into " + localBranch + " ---");
-            executeCommand("git", "merge", localSourceBranchName);
+                // 5. Checkout target branch
+                System.out.println("\n--- Checking out target branch: " + localBranch + " ---");
+                executeCommand("git", "checkout", localBranch);
 
+                // 6. Merge the updated source branch into the target branch
+                System.out.println("\n--- Merging branch " + localSourceBranchName + " into " + localBranch + " ---");
+                executeCommand("git", "merge", localSourceBranchName);
+            }
             System.out.println("\nBatch operation completed.");
-            savePreferences(localBranch, sourceBranch);
+            savePreferences(localBranch, String.join(",", sourceBranches));
 
         } catch (IOException | InterruptedException e) {
             System.err.println("An error occurred while executing git command.");
@@ -128,13 +144,13 @@ public class App {
         }
     }
 
-    private static String selectBranch(Scanner scanner, String type, List<String> branches, String lastSelected) {
+    private static List<String> selectBranches(Scanner scanner, String type, List<String> branches, String lastSelected) {
         BranchNode root = buildBranchTree(branches);
         List<String> selectableBranches = new ArrayList<>();
 
         System.out.println("\nPlease select a " + type + " branch:");
         printBranchTree(root, "", selectableBranches);
-
+        
         String defaultBranch = null;
         if (lastSelected != null && selectableBranches.contains(lastSelected)) {
             defaultBranch = lastSelected;
@@ -142,29 +158,66 @@ public class App {
 
         while (true) {
             System.out.print("Enter number (1-" + selectableBranches.size() + ")");
+            System.out.print(" (e.g., 1,3-5,8)");
             if (defaultBranch != null) {
                 System.out.print(" [default: " + defaultBranch + "]: ");
             } else {
                 System.out.print(": ");
             }
-
+            
             String input = scanner.nextLine();
 
             if (input.isEmpty() && defaultBranch != null) {
                 System.out.println("Using default: " + defaultBranch);
-                return defaultBranch;
+                List<String> result = new ArrayList<>();
+                result.add(defaultBranch);
+                return result;
             }
 
+            if (input.isEmpty()) {
+                System.out.println("No selection made.");
+                return new ArrayList<>();
+            }
+            
             try {
-                int choice = Integer.parseInt(input);
-                if (choice >= 1 && choice <= selectableBranches.size()) {
-                    return selectableBranches.get(choice - 1);
+                List<String> selected = new ArrayList<>();
+                Set<Integer> indices = parseIntegerRanges(input);
+                for (int index : indices) {
+                    if (index >= 1 && index <= selectableBranches.size()) {
+                        selected.add(selectableBranches.get(index - 1));
+                    } else {
+                        throw new NumberFormatException("Index " + index + " is out of range.");
+                    }
                 }
-                System.out.println("Invalid selection. Please try again.");
+                return selected;
             } catch (NumberFormatException e) {
-                System.out.println("Invalid input. Please enter a number or press Enter for default.");
+                System.out.println("Invalid input: " + e.getMessage() + ". Please use numbers, commas, and hyphens (e.g., 1,3-5).");
             }
         }
+    }
+
+    private static Set<Integer> parseIntegerRanges(String input) throws NumberFormatException {
+        // Using a LinkedHashSet to preserve order and remove duplicates
+        Set<Integer> numbers = new LinkedHashSet<>();
+        String[] parts = input.split(",");
+        for (String part : parts) {
+            part = part.trim();
+            if (part.contains("-")) {
+                String[] range = part.split("-");
+                if (range.length != 2) throw new NumberFormatException("Invalid range format: " + part);
+                int start = Integer.parseInt(range[0].trim());
+                int end = Integer.parseInt(range[1].trim());
+                if (start > end) {
+                    throw new NumberFormatException("Start of range cannot be greater than end: " + part);
+                }
+                for (int i = start; i <= end; i++) {
+                    numbers.add(i);
+                }
+            } else {
+                numbers.add(Integer.parseInt(part));
+            }
+        }
+        return numbers;
     }
 
     private static BranchNode buildBranchTree(List<String> branches) {
