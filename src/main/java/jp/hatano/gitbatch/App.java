@@ -58,17 +58,31 @@ public class App {
                 System.out.println("No other branches available to merge.");
                 return;
             }
-            String branchToMerge = selectBranch(scanner, "local or remote", allBranches, lastSelectedMergeBranch);
+            String sourceBranch = selectBranch(scanner, "source (to merge from)", allBranches, lastSelectedMergeBranch);
 
-            // 3. Checkout the first branch and merge the second branch into it.
-            System.out.println("\n--- Checking out local branch: " + localBranch + " ---");
+            // 3. Determine the local name for the source branch
+            String localSourceBranchName = sourceBranch;
+            if (sourceBranch.startsWith("origin/")) { // Simple assumption for remote branches
+                localSourceBranchName = sourceBranch.substring("origin/".length());
+            }
+
+            // 4. Checkout source branch and pull latest changes
+            System.out.println("\n--- Checking out source branch: " + localSourceBranchName + " ---");
+            executeCommand("git", "checkout", localSourceBranchName);
+
+            System.out.println("\n--- Pulling latest changes for " + localSourceBranchName + " ---");
+            executeCommand("git", "pull");
+
+            // 5. Checkout target branch
+            System.out.println("\n--- Checking out target branch: " + localBranch + " ---");
             executeCommand("git", "checkout", localBranch);
 
-            System.out.println("\n--- Merging branch " + branchToMerge + " into " + localBranch + " ---");
-            executeCommand("git", "merge", branchToMerge);
+            // 6. Merge the updated source branch into the target branch
+            System.out.println("\n--- Merging branch " + localSourceBranchName + " into " + localBranch + " ---");
+            executeCommand("git", "merge", localSourceBranchName);
 
             System.out.println("\nBatch operation completed.");
-            savePreferences(localBranch, branchToMerge);
+            savePreferences(localBranch, sourceBranch);
 
         } catch (IOException | InterruptedException e) {
             System.err.println("An error occurred while executing git command.");
