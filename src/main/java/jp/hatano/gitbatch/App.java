@@ -49,13 +49,12 @@ public class App {
                 System.out.println("No local branches found. Make sure you are in a git repository.");
                 return;
             }
-            List<String> selectBranches = selectBranches(scanner, "local", localBranches, lastSelectedLocalBranch);
+            String localBranch = selectBranch(scanner,"local",localBranches,lastSelectedLocalBranch);
 
-            if (selectBranches.size() == 0) {
+            if ( localBranch == null || localBranch.isEmpty() ) {
                 System.out.println("No local branch selected. Aborting.");
                 return;
             }
-            String localBranch = selectBranches.get(0); // Only one local branch can be selected
 
             // 2. Select another branch from local or remote
             List<String> allBranches = new ArrayList<>(localBranches);
@@ -141,6 +140,51 @@ public class App {
             }
         } catch (IOException e) {
             System.err.println("Warning: Could not save preferences. " + e.getMessage());
+        }
+    }
+
+    private static String selectBranch(Scanner scanner, String type, List<String> branches, String lastSelected) {
+        BranchNode root = buildBranchTree(branches);
+        List<String> selectableBranches = new ArrayList<>();
+
+        System.out.println("\nPlease select a " + type + " branch:");
+        printBranchTree(root, "", selectableBranches);
+
+        String defaultBranch = null;
+        if (lastSelected != null && selectableBranches.contains(lastSelected)) {
+            defaultBranch = lastSelected;
+        }
+
+        while (true) {
+            System.out.print("Enter number (1-" + selectableBranches.size() + ")");
+            if (defaultBranch != null) {
+                System.out.print(" [default: " + defaultBranch + "]: ");
+            } else {
+                System.out.print(": ");
+            }
+
+            String input = scanner.nextLine();
+
+            if (input.isEmpty() && defaultBranch != null) {
+                System.out.println("Using default: " + defaultBranch);
+                return defaultBranch;
+            }
+
+            if (input.isEmpty()) {
+                System.out.println("No selection made.");
+                return null;
+            }
+
+            try {
+                int index = Integer.parseInt(input.trim());
+                if (index >= 1 && index <= selectableBranches.size()) {
+                    return selectableBranches.get(index - 1);
+                } else {
+                    System.out.println("Invalid number. Please enter a number between 1 and " + selectableBranches.size() + ".");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid input. Please enter a single number.");
+            }
         }
     }
 
