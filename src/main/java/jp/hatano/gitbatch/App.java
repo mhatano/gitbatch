@@ -81,20 +81,37 @@ public class App {
                     localSourceBranchName = sourceBranch.substring("origin/".length());
                 }
 
+                int resultCode;
                 // 4. Checkout source branch and pull latest changes
                 System.out.println("\n--- Checking out source branch: " + localSourceBranchName + " ---");
-                executeCommand("git", "checkout", localSourceBranchName);
+                resultCode = executeCommand("git", "checkout", localSourceBranchName);
+                if ( resultCode != 0 ) {
+                    System.out.println("Failed to checkout branch " + localSourceBranchName + ". Skipping to next branch.");
+                    System.exit(-1);
+                }
 
                 System.out.println("\n--- Pulling latest changes for " + localSourceBranchName + " ---");
-                executeCommand("git", "pull");
+                resultCode = executeCommand("git", "pull");
+                if ( resultCode != 0 ) {
+                    System.out.println("Failed to pull latest changes for " + localSourceBranchName + ". Skipping to next branch.");
+                    System.exit(-1);
+                }
 
                 // 5. Checkout target branch
                 System.out.println("\n--- Checking out target branch: " + localBranch + " ---");
-                executeCommand("git", "checkout", localBranch);
+                resultCode = executeCommand("git", "checkout", localBranch);
+                if ( resultCode != 0 ) {
+                    System.out.println("Failed to checkout branch " + localBranch + ". Aborting.");
+                    System.exit(-1);
+                }
 
                 // 6. Merge the updated source branch into the target branch
                 System.out.println("\n--- Merging branch " + localSourceBranchName + " into " + localBranch + " ---");
-                executeCommand("git", "merge", localSourceBranchName);
+                resultCode = executeCommand("git", "merge", localSourceBranchName);
+                if ( resultCode != 0 ) {
+                    System.out.println("Merge conflicts occurred while merging " + localSourceBranchName + " into " + localBranch + ". Please resolve them manually. Skipping to next branch.");
+                    System.exit(-1);
+                }
             }
             System.out.println("\nBatch operation completed.");
             savePreferences(localBranch, String.join(",", sourceBranches));
@@ -330,7 +347,7 @@ public class App {
         return branches;
     }
 
-    private static void executeCommand(String... command) throws IOException, InterruptedException {
+    private static int executeCommand(String... command) throws IOException, InterruptedException {
         ProcessBuilder processBuilder = new ProcessBuilder(command);
         Process process = processBuilder.start();
 
@@ -340,6 +357,8 @@ public class App {
 
         int exitCode = process.waitFor();
         System.out.println("Command '" + String.join(" ", command) + "' finished with exit code " + exitCode);
+
+        return exitCode;
     }
 
     private static void printStream(BufferedReader reader, String type) throws IOException {
